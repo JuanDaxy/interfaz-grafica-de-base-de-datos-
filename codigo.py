@@ -10,7 +10,7 @@ class ProyectoApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Gestión Total - Base de Datos")
-        self.geometry("1100x700")
+        self.geometry("1150x700")
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -21,7 +21,7 @@ class ProyectoApp(ctk.CTk):
         
         ctk.CTkLabel(self.sidebar, text="MENÚ", font=("Arial", 22, "bold")).pack(pady=20)
 
-        # Todos tus módulos
+        # Módulos
         self.crear_boton("📦 Productos", "producto")
         self.crear_boton("🏪 Tiendas", "tienda")
         self.crear_boton("👥 Clientes", "usuario")
@@ -35,17 +35,20 @@ class ProyectoApp(ctk.CTk):
         self.lbl_titulo = ctk.CTkLabel(self.content, text="Seleccione un módulo", font=("Arial", 22, "bold"))
         self.lbl_titulo.pack(pady=15)
 
-        # Botones de Acción
+        # Botones de Acción (INTERFAZ COMPLETA)
         self.acciones = ctk.CTkFrame(self.content, fg_color="transparent")
         self.acciones.pack(fill="x", padx=20, pady=10)
 
-        self.btn_add = ctk.CTkButton(self.acciones, text="➕ Agregar", fg_color="#2ECC71", hover_color="#27AE60", command=self.abrir_formulario)
+        self.btn_add = ctk.CTkButton(self.acciones, text="➕ Agregar", fg_color="#2ECC71", hover_color="#27AE60", command=self.abrir_formulario_agregar)
         self.btn_add.pack(side="left", padx=5)
+
+        self.btn_edit = ctk.CTkButton(self.acciones, text="✏️ Modificar", fg_color="#F39C12", hover_color="#D68910", command=self.abrir_formulario_modificar)
+        self.btn_edit.pack(side="left", padx=5)
 
         self.btn_del = ctk.CTkButton(self.acciones, text="🗑 Eliminar", fg_color="#E74C3C", hover_color="#C0392B", command=self.eliminar_dato)
         self.btn_del.pack(side="left", padx=5)
 
-        # Tabla con Scrollbars (Barra de desplazamiento)
+        # Tabla con Scrollbars
         self.frame_tabla = ctk.CTkFrame(self.content)
         self.frame_tabla.pack(expand=True, fill="both", padx=20, pady=10)
 
@@ -100,12 +103,9 @@ class ProyectoApp(ctk.CTk):
         try:
             conn = self.conectar()
             cursor = conn.cursor()
-            
-            # 1. Detectar automáticamente cuál es la llave primaria de la tabla
             cursor.execute(f"SHOW KEYS FROM {self.tabla_actual} WHERE Key_name = 'PRIMARY'")
-            pk_columna = cursor.fetchone()[4] # El nombre de la columna PK
+            pk_columna = cursor.fetchone()[4] 
 
-            # 2. Buscar el valor de esa columna en la fila seleccionada
             indice_columna = self.tree["columns"].index(pk_columna)
             id_valor = self.tree.item(seleccion)['values'][indice_columna]
 
@@ -116,15 +116,12 @@ class ProyectoApp(ctk.CTk):
                 self.cargar_datos(self.tabla_actual)
                 
         except Error as e:
-            # Si intentas borrar una tienda que tiene productos, saltará este error protegiendo tu base de datos
-            messagebox.showerror("No se puede eliminar", "Este registro está conectado a otra tabla (Ej. No puedes borrar un cliente si tiene pedidos activos).\n\nDetalle técnico: " + str(e))
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror("No se puede eliminar", f"Este registro está en uso en otra tabla.\n\nError: {e}")
         finally:
             if 'conn' in locals() and conn.is_connected():
                 conn.close()
 
-    def abrir_formulario(self):
+    def abrir_formulario_agregar(self):
         if not self.tabla_actual:
             messagebox.showwarning("Aviso", "Primero selecciona un módulo a la izquierda")
             return
@@ -136,16 +133,13 @@ class ProyectoApp(ctk.CTk):
 
         ctk.CTkLabel(ventana, text=f"NUEVO: {self.tabla_actual.upper()}", font=("Arial", 18, "bold")).pack(pady=15)
 
-        # Usamos un ScrollableFrame por si la tabla tiene muchas columnas (como Productos)
         scroll_form = ctk.CTkScrollableFrame(ventana, width=400, height=400)
         scroll_form.pack(pady=10, padx=10, fill="both", expand=True)
 
         entradas = {}
-        
         try:
             conn = self.conectar()
             cursor = conn.cursor()
-            # Le preguntamos a la base de datos qué columnas tiene la tabla
             cursor.execute(f"DESCRIBE {self.tabla_actual}")
             columnas = cursor.fetchall()
             
@@ -155,7 +149,6 @@ class ProyectoApp(ctk.CTk):
                 e = ctk.CTkEntry(scroll_form, width=350)
                 e.pack(padx=20, pady=2)
                 entradas[nombre_col] = e
-
         except Error as e:
             messagebox.showerror("Error", str(e))
             return
@@ -165,8 +158,6 @@ class ProyectoApp(ctk.CTk):
         def guardar():
             columnas_nombres = ", ".join(entradas.keys())
             placeholders = ", ".join(["%s"] * len(entradas))
-            
-            # Si dejaron el espacio en blanco, enviamos None (NULL) a SQL
             valores = [e.get() if e.get() != "" else None for e in entradas.values()]
             
             try:
@@ -178,12 +169,83 @@ class ProyectoApp(ctk.CTk):
                 ventana.destroy()
                 self.cargar_datos(self.tabla_actual)
             except Error as e:
-                messagebox.showerror("Error de Base de Datos", f"Verifica que los datos sean correctos (Ej. Fechas en formato YYYY-MM-DD).\n\nError: {e}")
+                messagebox.showerror("Error", f"Error al guardar: {e}")
             finally:
                 if 'conn_g' in locals() and conn_g.is_connected():
                     conn_g.close()
 
-        ctk.CTkButton(ventana, text="✔ GUARDAR REGISTRO", fg_color="#2ECC71", hover_color="#27AE60", command=guardar).pack(pady=15)
+        ctk.CTkButton(ventana, text="✔ GUARDAR NUEVO", fg_color="#2ECC71", hover_color="#27AE60", command=guardar).pack(pady=15)
+
+    def abrir_formulario_modificar(self):
+        seleccion = self.tree.selection()
+        if not seleccion:
+            messagebox.showwarning("Aviso", "Selecciona la fila que deseas modificar")
+            return
+
+        ventana = ctk.CTkToplevel(self)
+        ventana.title(f"Modificar {self.tabla_actual.upper()}")
+        ventana.geometry("450x550")
+        ventana.attributes("-topmost", True)
+
+        ctk.CTkLabel(ventana, text=f"MODIFICAR: {self.tabla_actual.upper()}", font=("Arial", 18, "bold")).pack(pady=15)
+
+        scroll_form = ctk.CTkScrollableFrame(ventana, width=400, height=400)
+        scroll_form.pack(pady=10, padx=10, fill="both", expand=True)
+
+        valores_actuales = self.tree.item(seleccion)['values']
+        columnas_nombres = self.tree["columns"]
+        entradas = {}
+        
+        try:
+            conn = self.conectar()
+            cursor = conn.cursor()
+            cursor.execute(f"SHOW KEYS FROM {self.tabla_actual} WHERE Key_name = 'PRIMARY'")
+            pk_columna = cursor.fetchone()[4]
+        except Exception:
+            pk_columna = columnas_nombres[0] # Por defecto usa la primera si falla
+        finally:
+            if 'conn' in locals() and conn.is_connected():
+                conn.close()
+
+        pk_valor = None
+
+        # Crear los campos y rellenarlos con los datos actuales
+        for i, col in enumerate(columnas_nombres):
+            ctk.CTkLabel(scroll_form, text=col.replace("_", " ").title() + ":").pack(anchor="w", padx=20, pady=(10,0))
+            e = ctk.CTkEntry(scroll_form, width=350)
+            e.pack(padx=20, pady=2)
+            
+            # Poner el texto actual en la caja
+            valor_texto = str(valores_actuales[i]) if valores_actuales[i] is not None and valores_actuales[i] != "None" else ""
+            e.insert(0, valor_texto)
+            
+            if col == pk_columna:
+                e.configure(state="disabled") # Bloquear la Llave Primaria (No se puede editar el ID/NIT/Cedula)
+                pk_valor = valores_actuales[i]
+            else:
+                entradas[col] = e
+
+        def guardar_cambios():
+            # Construir consulta UPDATE tabla SET col1=%s, col2=%s WHERE id=%s
+            set_clause = ", ".join([f"{col}=%s" for col in entradas.keys()])
+            valores = [e.get() if e.get() != "" else None for e in entradas.values()]
+            valores.append(pk_valor) # Añadir el valor de la PK para el WHERE
+            
+            try:
+                conn_g = self.conectar()
+                cursor_g = conn_g.cursor()
+                cursor_g.execute(f"UPDATE {self.tabla_actual} SET {set_clause} WHERE {pk_columna} = %s", valores)
+                conn_g.commit()
+                messagebox.showinfo("Éxito", "Registro modificado correctamente")
+                ventana.destroy()
+                self.cargar_datos(self.tabla_actual)
+            except Error as e:
+                messagebox.showerror("Error", f"Error al modificar: {e}")
+            finally:
+                if 'conn_g' in locals() and conn_g.is_connected():
+                    conn_g.close()
+
+        ctk.CTkButton(ventana, text="💾 GUARDAR CAMBIOS", fg_color="#F39C12", hover_color="#D68910", command=guardar_cambios).pack(pady=15)
 
 if __name__ == "__main__":
     app = ProyectoApp()
